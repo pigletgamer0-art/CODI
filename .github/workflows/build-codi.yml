@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'CODI-Android-Source-Para-GitHub.zip'
+      - '.github/workflows/build-codi.yml'
   workflow_dispatch:
 
 permissions:
@@ -25,11 +26,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Instalar herramientas Android
-        uses: android-actions/setup-android@v3
-
-      - name: Instalar SDK de Android 35
-        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+      - name: Preparar SDK Android 35 desde herramientas del runner
+        run: |
+          echo "ANDROID_HOME=${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
 
       - name: Preparar Gradle 8.10.2
         uses: gradle/actions/setup-gradle@v4
