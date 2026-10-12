@@ -1,0 +1,76 @@
+name: Compilar CODI Android
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'CODI-Android-Source-Para-GitHub.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    name: APK desde código nativo
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Instalar herramientas Android
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar SDK de Android 35
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Preparar Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Extraer código fuente CODI
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          archive=Path('CODI-Android-Source-Para-GitHub.zip')
+          if not archive.is_file():
+              raise SystemExit('Falta CODI-Android-Source-Para-GitHub.zip: súbelo al repositorio')
+          target=Path('android-source').resolve()
+          with ZipFile(archive) as z:
+              if z.testzip() is not None:
+                  raise SystemExit('El ZIP de CODI está dañado')
+              for member in z.infolist():
+                  resolved=(target/member.filename).resolve()
+                  if not resolved.is_relative_to(target):
+                      raise SystemExit('Ruta insegura en el ZIP')
+              z.extractall(target)
+          for required in ['settings.gradle','app/build.gradle','scripts/check_assets.py',
+                           'app/src/main/AndroidManifest.xml',
+                           'app/src/main/java/cl/codi/academy/MainActivity.java']:
+              if not (target/required).is_file():
+                  raise SystemExit(f'Archivo Android faltante: {required}')
+          print('Archivos Android extraídos correctamente')
+          PY
+
+      - name: Verificar recursos antes de compilar
+        run: python3 android-source/scripts/check_assets.py
+
+      - name: Compilar APK nuevo con Android Gradle Plugin
+        run: gradle --no-daemon -p android-source :app:assembleDebug
+
+      - name: Publicar APK como artefacto descargable
+        uses: actions/upload-artifact@v4
+        with:
+          name: CODI-Android-Debug-APK
+          path: android-source/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
